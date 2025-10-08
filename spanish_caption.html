@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,body{margin:0;padding:0;background:black;height:100%;color:white;
+font-family:system-ui,Arial;text-align:center;display:flex;
+justify-content:center;align-items:center;font-size:60px;line-height:1.2;}
+</style>
+</head>
+<body>
+<div id="cap">Conectando…</div>
+<script>
+const el=document.getElementById('cap');
+const ws = new WebSocket('ws://localhost:8765');
+ws.onopen=()=>el.textContent='';
+ws.onmessage=e=>{
+  const {text}=JSON.parse(e.data);
+  el.textContent=text;
+};
+ws.onclose=()=>el.textContent='Desconectado';
+</script>
+</body>
+</html>
