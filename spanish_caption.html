@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Captions</title>
+<style>
+  /* Page: no flex centering; anchor top-left */
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #0b0b0b;
+    color: #f7f7f7;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }
+  .wrap {
+    box-sizing: border-box;
+    padding: 4vh 4vw;
+    max-width: 1200px;       /* readable width */
+  }
+
+  /* Two-line caption block */
+  .cap {
+    white-space: normal;
+    word-wrap: break-word;
+    text-align: left;        /* left-justify */
+    line-height: 1.25;
+  }
+  .prev {
+    opacity: 0.55;           /* dim previous line */
+    font-size: clamp(22px, 5vw, 52px);
+    margin-bottom: 0.2em;
+  }
+  .curr {
+    opacity: 1;
+    font-size: clamp(28px, 6vw, 64px);
+  }
+
+  /* Optional: keep content from hugging the very edge on tiny screens */
+  @media (max-width: 480px) {
+    .wrap { padding: 3vh 3vw; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="cap">
+      <div id="prev" class="prev"></div>
+      <div id="curr" class="curr">Connecting…</div>
+    </div>
+  </div>
+
+<script>
+/*
+  Client-side cadence:
+  - We receive text snapshots (same as before).
+  - We treat them as the "current" line and debounce visual updates naturally.
+  - If no new text arrives for PAUSE_MS, we "commit" current -> previous line.
+  - We enforce MAX_WORDS total on screen by trimming the oldest words from 'prev'.
+*/
+const MAX_WORDS = 20;
+const PAUSE_MS  = 700;
+
+const prevEl = document.getElementById('prev');
+const currEl = document.getElementById('curr');
+
+let prevWords = [];     // committed words (older line)
+let currWords = [];     // current line words (actively speaking)
+let pauseTimer = null;
+
+// Helpers
+function tokenize(s){ return (s || "").trim().split(/\s+/).filter(Boolean); }
+function lastN(arr, n){ return arr.slice(Math.max(0, arr.length - n)); }
+function render(){
+  // Enforce the 20-word cap across both lines:
+  let total = prevWords.length + currWords.length;
+  if (total > MAX_WORDS){
+    const excess = total - MAX_WORDS;
+    // Trim from the oldest words first: from prevWords
+    prevWords = prevWords.slice(excess);
+  }
+  prevEl.textContent = prevWords.join(' ');
+  currEl.textContent = currWords.length ? currWords.join(' ') : '';
+}
+
+function commit(){
+  if (currWords.length === 0) return;
+  prevWords = lastN(prevWords.concat(currWords), MAX_WORDS);
+  currWords = [];
+  render();
+}
+
+function scheduleCommit(){
+  if (pauseTimer) clearTimeout(pauseTimer);
+  pauseTimer = setTimeout(commit, PAUSE_MS);
+}
+
+// WebSocket hookup (same endpoint as before)
+const ws = new WebSocket('ws://localhost:8765');
+ws.onopen = () => { currEl.textContent = ''; };
+ws.onmessage = (e) => {
+  const { text } = JSON.parse(e.data);
+  currWords = tokenize(text);
+  render();
+  scheduleCommit();
+};
+ws.onclose = () => { currEl.textContent = 'Disconnected'; };
+ws.onerror = () => { /* keep silent; render() already shows latest */ };
+</script>
+</body>
+</html>
